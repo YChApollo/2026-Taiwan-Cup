@@ -1,5 +1,10 @@
-.vscode
-node_modules
+# General
+*.vscode*
 *lock*
 
-/src-tauri/target
+# Rust
+src-tauri/target
+
+# Node.js
+src-ui/dist
+src-ui/node_modules
