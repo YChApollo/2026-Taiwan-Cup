@@ -1,6 +1,7 @@
 # General
 *.vscode*
 *lock*
+*fuse*
 
 # Rust
 src-tauri/target
