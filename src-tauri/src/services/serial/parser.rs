@@ -1,6 +1,6 @@
 use crate::services::serial::crc;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TelemetryPayload {
     x_acceleration: f32,
@@ -74,12 +74,10 @@ pub struct Parser {
 
 impl Parser {
     pub fn new() -> Self {
-        let parser = Parser {
+        Self {
             state: ParseState::Header,
             buffer: vec![],
-        };
-
-        parser
+        }
     }
 
     pub fn feed(&mut self, byte: u8) -> ParseResult {
@@ -108,7 +106,7 @@ impl Parser {
                 if self.verify(crc) {
                     match parse_payload(&self.buffer) {
                         Ok(p) => ParseResult::Ok(p),
-                        Err(_) => ParseResult::CrcError("failed while parsing payload".to_string()),
+                        Err(e) => ParseResult::CrcError(e),
                     }
                 } else {
                     ParseResult::CrcError("failed while verifying CRC".to_string())

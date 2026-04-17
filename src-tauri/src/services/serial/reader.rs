@@ -1,11 +1,27 @@
+use crate::services::serial::handler;
 use crate::services::serial::parser::ParseResult;
 use crate::services::serial::parser::Parser;
 
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::io::AsyncReadExt;
 use tokio_serial::SerialPortBuilderExt;
+use tokio_serial::SerialStream;
 use tokio_util::sync::CancellationToken;
+
+fn init_serial(
+    app_handle: &AppHandle,
+    path: String,
+    baud_rate: u32,
+) -> Result<SerialStream, String> {
+    match tokio_serial::new(path, baud_rate).open_native_async() {
+        Ok(s) => return Ok(s),
+        Err(e) => {
+            handler::on_error(&app_handle, "serial-error", format!("serial-error: {e}"));
+            return Err(e.to_string());
+        }
+    };
+}
 
 #[allow(unused)]
 pub async fn rx_loop(
@@ -14,14 +30,8 @@ pub async fn rx_loop(
     cancellation_token: CancellationToken,
     failed_count: Arc<Mutex<u32>>,
     app_handle: AppHandle,
-) -> Result<(), ()> {
-    let mut serial_stream = match tokio_serial::new(path, baud_rate).open_native_async() {
-        Ok(s) => s,
-        Err(e) => {
-            app_handle.emit("serial-error", format!("serial-error: {e}"));
-            return Err(());
-        }
-    };
+) -> Result<(), String> {
+    let mut serial_stream = init_serial(&app_handle, path, baud_rate)?;
 
     let mut parser = Parser::new();
 
@@ -37,20 +47,18 @@ pub async fn rx_loop(
                 let byte = match result {
                     Ok(b) => b,
                     Err(e) => {
-                        app_handle.emit("serial-error", format!("serial-error: {e}")).ok();
-                        return Err(());
+                        handler::on_error(&app_handle, "serial-error", format!("serial-error: {e}"));
+                        return Err(e.to_string());
                     }
                 };
 
                 match parser.feed(byte) {
                     ParseResult::Incomplete => {}
                     ParseResult::Ok(payload) => {
-                        app_handle.emit("update-view", &payload).unwrap();
+                        handler::on_payload(&app_handle, "update-view", payload);
                     }
                     ParseResult::CrcError(e) => {
-                        *failed_count.lock().unwrap() += 1;
-
-                        app_handle.emit("packet-verify-failed", ()).unwrap();
+                        handler::on_packet_validation_error(failed_count.clone());
                     }
                 }
             }
